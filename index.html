@@ -89,6 +89,7 @@
     font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
     background: var(--amber); color: var(--ink); padding: 4px 10px; border-radius: 999px;
   }
+  .demo-badge.live { background: var(--teal); color: #fff; }
   #chat { padding: 24px; min-height: 380px; max-height: 560px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
   .msg { max-width: 82%; padding: 12px 18px; border-radius: 18px; font-size: 15px; line-height: 1.55; animation: pop .25s ease; }
   @keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -223,13 +224,13 @@
 <section class="block" id="demo">
   <div class="wrap">
     <h2>Meet your trial matcher</h2>
-    <p class="sub">Answer three quick questions. No medical jargon, no 40-page PDFs. This demo runs on a sample dataset modeled on public trial registries.</p>
+    <p class="sub">Answer three quick questions. No medical jargon, no 40-page PDFs. The matcher searches live recruiting studies on ClinicalTrials.gov, with a built-in demo dataset as backup.</p>
     <div class="demo-shell reveal">
       <div class="demo-head">
         <div class="dot"></div>
         <strong>TrialRun Matcher</strong>
         <small>typically replies instantly</small>
-        <span class="demo-badge">Demo data</span>
+        <span class="demo-badge" id="dataBadge">Demo data</span>
       </div>
       <div id="chat"></div>
       <div class="chat-input">
@@ -299,7 +300,7 @@
       </details>
       <details class="reveal">
         <summary>Where does the trial data come from?</summary>
-        <p>The live product reads from public registries like ClinicalTrials.gov and directly from sponsor sites. This demo runs on a small sample dataset modeled on real public listings, so you can feel how matching works.</p>
+        <p>Live recruiting studies straight from ClinicalTrials.gov, the US government's trial registry — the matcher queries it in real time. If the registry is unreachable, the demo falls back to a small sample dataset modeled on real public listings.</p>
       </details>
       <details class="reveal">
         <summary>What does it cost patients?</summary>
@@ -537,41 +538,192 @@ function matchTrials() {
   return scored.slice(0, 5);
 }
 
-function renderResults(results) {
-  if (results.length === 0) {
-    botSay("I couldn't find a close match in this demo dataset for <strong>" + esc(state.condition) + "</strong>. Try one of the common conditions, like diabetes, asthma, migraine, or eczema.", 1100, () => {
-      addChips(["Type 2 diabetes", "Asthma", "Migraine", "Eczema", "Start over"], (v) => {
-        if (v === "Start over") restart(); else { state.condition = v; askLocation(); }
-      });
-    });
-    return;
+function setDataBadge(mode) {
+  const b = document.getElementById("dataBadge");
+  if (!b) return;
+  if (mode === "live") { b.textContent = "Live registry"; b.classList.add("live"); }
+  else { b.textContent = "Demo data"; b.classList.remove("live"); }
+}
+
+/* ---------- live ClinicalTrials.gov integration ---------- */
+function parseAge(s) {
+  if (!s) return null;
+  const m = String(s).match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function cleanPhase(phases) {
+  if (!phases || !phases.length) return "N/A";
+  const out = phases.map(p => {
+    const m = String(p).match(/PHASE(\d)/);
+    return m ? "Phase " + m[1] : "N/A";
+  });
+  return out.filter((v, i, a) => a.indexOf(v) === i).join(" / ");
+}
+
+function extractInclusion(criteria) {
+  if (!criteria) return [];
+  let text = String(criteria);
+  const incIdx = text.search(/inclusion criteria:/i);
+  if (incIdx >= 0) text = text.slice(incIdx);
+  const excIdx = text.search(/exclusion criteria:/i);
+  if (excIdx > 0) text = text.slice(0, excIdx);
+  return text.split(/\n+/)
+    .map(l => l.replace(/^[\s*\u2022\-\u2013\d.)\]]+/, "").trim())
+    .filter(l => l.length > 12 && !/inclusion criteria/i.test(l))
+    .slice(0, 3);
+}
+
+function normalizeStudy(s) {
+  const ps = s.protocolSection || {};
+  const idm = ps.identificationModule || {};
+  const dm = ps.designModule || {};
+  const em = ps.eligibilityModule || {};
+  const desc = ps.descriptionModule || {};
+  const clm = ps.contactsLocationsModule || {};
+  const all = clm.locations || [];
+  const rec = all.filter(l => (l.status || "").toUpperCase() === "RECRUITING");
+  const useLocs = rec.length ? rec : all;
+  const uniq = [];
+  const seen = {};
+  useLocs.forEach(l => {
+    const label = l.city ? (l.city + ", " + (l.state || l.country || "")) : (l.country || "");
+    if (label && !seen[label]) { seen[label] = 1; uniq.push({ label, city: l.city || "", state: l.state || "", country: l.country || "" }); }
+  });
+  const summary = (desc.briefSummary || "").replace(/\s+/g, " ").trim();
+  return {
+    id: idm.nctId || "NCT-unknown",
+    title: idm.briefTitle || idm.officialTitle || "Untitled study",
+    phase: cleanPhase(dm.phases),
+    locations: uniq,
+    ageMin: parseAge(em.minimumAge),
+    ageMax: parseAge(em.maximumAge),
+    summary: summary.length > 300 ? summary.slice(0, 300).trim() + "..." : summary,
+    eligibility: extractInclusion(em.eligibilityCriteria),
+    url: "https://clinicaltrials.gov/study/" + (idm.nctId || ""),
+    isLive: true
+  };
+}
+
+async function fetchLiveTrials() {
+  const params = new URLSearchParams({
+    format: "json",
+    "filter.overallStatus": "RECRUITING",
+    "query.cond": state.condition,
+    pageSize: "25",
+    countTotal: "true"
+  });
+  const locRaw = state.location.toLowerCase();
+  const anywhere = /anywhere|remote|any|nationwide|doesn.?t matter/.test(locRaw);
+  if (!anywhere && state.location.trim()) params.set("query.locn", state.location.trim());
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const resp = await fetch("https://clinicaltrials.gov/api/v2/studies?" + params.toString(), { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+    return { studies: (data.studies || []).map(normalizeStudy), total: data.totalCount || 0 };
+  } catch (e) {
+    clearTimeout(timer);
+    return null;
   }
-  botSay("Done. I found <strong>" + results.length + " trial" + (results.length > 1 ? "s" : "") + "</strong> that look like a strong fit. Here's the top of your list:", 1400, () => {
-    results.forEach((r, i) => {
-      setTimeout(() => {
-        const t = r.trial;
-        const card = document.createElement("div");
-        card.className = "trial-card";
-        const locText = t.locations.length ? t.locations.join(" · ") : "Nationwide (remote)";
-        card.innerHTML =
-          '<div class="t-head"><h3>' + esc(t.title) + '</h3>' +
-          '<div class="match-score">' + r.score + '% match</div></div>' +
-          '<div class="t-meta"><span class="t-tag phase">' + esc(t.phase) + '</span>' +
-          '<span class="t-tag">' + esc(locText) + '</span></div>' +
-          '<p>' + esc(t.summary) + '</p>' +
-          '<p class="why"><strong>Why you match:</strong> ' + esc(r.reasons.join(" · ")) + '</p>' +
-          '<ul>' + t.eligibility.map(e => "<li>" + esc(e) + "</li>").join("") + "</ul>" +
-          '<p style="font-size:13px;color:var(--ink-soft);margin-bottom:12px;"><strong>What\'s involved:</strong> ' + esc(t.involved) + '</p>' +
-          '<div class="t-cta"><button class="btn" data-trial="' + esc(t.id) + '">Start pre-screening</button>' +
-          '<span class="t-id">' + esc(t.id) + ' · demo listing</span></div>';
-        chat.appendChild(card);
-        scrollChat();
-        card.querySelector("button").onclick = (e) => openModal(t.title);
-        if (i === results.length - 1) {
-          setTimeout(() => addChips(["Start over"], () => restart()), 400);
-        }
-      }, i * 450);
+}
+
+function scoreLiveTrials(trials) {
+  const locRaw = state.location.toLowerCase();
+  const anywhere = /anywhere|remote|any|nationwide|doesn.?t matter/.test(locRaw);
+  const out = [];
+  for (const t of trials) {
+    if (t.ageMin !== null && state.age < t.ageMin) continue;
+    if (t.ageMax !== null && state.age > t.ageMax) continue;
+    let score = 55;
+    const reasons = ["Matches your condition on ClinicalTrials.gov"];
+    const near = t.locations.find(l => {
+      const c = (l.city || "").toLowerCase(), st = (l.state || "").toLowerCase();
+      return (c.length > 2 && locRaw.includes(c)) || (st.length > 2 && locRaw.includes(st));
     });
+    if (near) { score += 20; reasons.push("Recruiting near you: " + near.label); }
+    else if (t.locations.length) {
+      score += anywhere ? 10 : 5;
+      reasons.push(t.locations.length + " recruiting site" + (t.locations.length > 1 ? "s" : "") + " listed");
+    }
+    if (t.ageMin !== null || t.ageMax !== null) {
+      reasons.push("You're in the eligible age range (" + (t.ageMin !== null ? t.ageMin : 0) + " to " + (t.ageMax !== null ? t.ageMax : "no upper limit") + ")");
+    }
+    if (state.diagnosed === "yes") { score += 5; reasons.push("Physician-diagnosed, which most trials require"); }
+    out.push({ trial: t, score: Math.min(98, score), reasons });
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out.slice(0, 5);
+}
+
+function trialCardHTML(r) {
+  const t = r.trial;
+  let locText;
+  if (t.isLive) {
+    const shown = t.locations.slice(0, 3).map(l => l.label).join(" \u00b7 ");
+    const extra = t.locations.length > 3 ? " + " + (t.locations.length - 3) + " more" : "";
+    locText = t.locations.length ? shown + extra : "See registry for sites";
+  } else {
+    locText = t.locations.length ? t.locations.join(" \u00b7 ") : "Nationwide (remote)";
+  }
+  const elig = t.eligibility.length
+    ? "<ul>" + t.eligibility.map(e => "<li>" + esc(e) + "</li>").join("") + "</ul>"
+    : '<p style="font-size:13px;color:var(--ink-soft);">Full eligibility criteria on the registry page.</p>';
+  const involved = t.isLive ? "" : '<p style="font-size:13px;color:var(--ink-soft);margin-bottom:12px;"><strong>What\'s involved:</strong> ' + esc(t.involved) + "</p>";
+  const extLink = t.isLive ? '<a href="' + t.url + '" target="_blank" rel="noopener" style="font-size:14px;font-weight:700;color:var(--teal);">View on ClinicalTrials.gov</a>' : "";
+  const idLabel = t.isLive ? t.id + " \u00b7 live registry" : t.id + " \u00b7 demo listing";
+  return '<div class="t-head"><h3>' + esc(t.title) + '</h3>' +
+    '<div class="match-score">' + r.score + '% match</div></div>' +
+    '<div class="t-meta"><span class="t-tag phase">' + esc(t.phase) + '</span>' +
+    '<span class="t-tag">' + esc(locText) + '</span></div>' +
+    '<p>' + esc(t.summary || "No summary provided.") + '</p>' +
+    '<p class="why"><strong>Why you match:</strong> ' + esc(r.reasons.join(" \u00b7 ")) + '</p>' +
+    elig + involved +
+    '<div class="t-cta"><button class="btn">Start pre-screening</button>' + extLink +
+    '<span class="t-id">' + esc(idLabel) + '</span></div>';
+}
+
+function showTrialCards(results) {
+  results.forEach((r, i) => {
+    setTimeout(() => {
+      const card = document.createElement("div");
+      card.className = "trial-card";
+      card.innerHTML = trialCardHTML(r);
+      chat.appendChild(card);
+      scrollChat();
+      card.querySelector("button").onclick = () => openModal(r.trial.title);
+      if (i === results.length - 1) {
+        setTimeout(() => addChips(["Start over"], () => restart()), 400);
+      }
+    }, i * 450);
+  });
+}
+
+async function runMatching() {
+  botSay("Give me a moment, I'm searching <strong>live recruiting studies</strong> on ClinicalTrials.gov for you.", 800, async () => {
+    const live = await fetchLiveTrials();
+    if (live && live.studies.length) {
+      const scored = scoreLiveTrials(live.studies);
+      if (scored.length) {
+        setDataBadge("live");
+        const n = live.total > scored.length ? " from <strong>" + live.total.toLocaleString() + " recruiting studies</strong>" : "";
+        botSay("Found <strong>" + scored.length + " strong matches</strong>" + n + ", ranked for you:", 900, () => showTrialCards(scored));
+        return;
+      }
+    }
+    setDataBadge("demo");
+    const fallback = matchTrials();
+    if (fallback.length) {
+      botSay("The live registry didn't return matches for that search, so here are <strong>sample matches</strong> from the built-in demo dataset instead:", 900, () => showTrialCards(fallback));
+    } else {
+      botSay("I couldn't find a close match for <strong>" + esc(state.condition) + "</strong>. Try a common condition like diabetes, asthma, migraine, or eczema.", 900, () => {
+        addChips(["Type 2 diabetes", "Asthma", "Migraine", "Eczema", "Start over"], (v) => {
+          if (v === "Start over") restart(); else { state.condition = v; askLocation(); }
+        });
+      });
+    }
   });
 }
 
@@ -604,9 +756,7 @@ function askDiagnosed() {
   botSay("Last one: <strong>has a doctor diagnosed you</strong> with this condition? Most trials require a formal diagnosis.", 900, () => {
     addChips(["Yes", "No", "Not yet"], (v) => {
       state.diagnosed = v.toLowerCase() === "yes" ? "yes" : "no";
-      botSay("Perfect, let me check what's open for you now.", 800, () => {
-        setTimeout(() => renderResults(matchTrials()), 600);
-      });
+      runMatching();
     });
   });
 }
