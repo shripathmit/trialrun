@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrialRun — Clinical trials, translated into human</title>
+<meta name="description" content="Tell TrialRun about your condition in plain words. We find clinical trials you're actually eligible for, and walk you to enrollment.">
+<style>
+  :root {
+    --ink: #10222e;
+    --ink-soft: #3d5566;
+    --teal: #0e7c6b;
+    --teal-dark: #0a5f52;
+    --teal-tint: #e6f4f1;
+    --sand: #faf8f4;
+    --card: #ffffff;
+    --amber: #e8a13d;
+    --line: #e7e2d8;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--sand);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* Nav */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(250, 248, 244, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .logo { font-weight: 800; font-size: 22px; letter-spacing: -0.5px; text-decoration: none; color: var(--ink); }
+  .logo span { color: var(--teal); }
+  .nav-links { display: flex; gap: 28px; align-items: center; }
+  .nav-links a { text-decoration: none; color: var(--ink-soft); font-size: 15px; font-weight: 500; }
+  .nav-links a:hover { color: var(--ink); }
+  .btn {
+    display: inline-block; text-decoration: none; cursor: pointer; border: none;
+    background: var(--teal); color: #fff; font-weight: 700; font-size: 15px;
+    padding: 12px 24px; border-radius: 999px; transition: transform .15s ease, background .15s ease;
+  }
+  .btn:hover { background: var(--teal-dark); transform: translateY(-1px); }
+  .btn.ghost { background: transparent; color: var(--teal); border: 2px solid var(--teal); }
+  .btn.ghost:hover { background: var(--teal-tint); }
+
+  /* Hero */
+  .hero { padding: 96px 0 72px; text-align: center; }
+  .pill {
+    display: inline-block; background: var(--teal-tint); color: var(--teal-dark);
+    font-size: 13px; font-weight: 700; padding: 6px 16px; border-radius: 999px; margin-bottom: 24px;
+    letter-spacing: 0.4px; text-transform: uppercase;
+  }
+  .hero h1 { font-size: clamp(38px, 6vw, 64px); line-height: 1.08; letter-spacing: -1.5px; margin-bottom: 20px; }
+  .hero h1 em { font-style: normal; color: var(--teal); }
+  .hero p.lede { font-size: 20px; color: var(--ink-soft); max-width: 640px; margin: 0 auto 36px; }
+  .hero-ctas { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .stat-row { display: flex; gap: 48px; justify-content: center; margin-top: 64px; flex-wrap: wrap; }
+  .stat { text-align: center; }
+  .stat .num { font-size: 34px; font-weight: 800; letter-spacing: -1px; color: var(--ink); }
+  .stat .lbl { font-size: 14px; color: var(--ink-soft); max-width: 180px; }
+
+  /* Sections */
+  section.block { padding: 72px 0; }
+  section.block h2 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -1px; margin-bottom: 12px; text-align: center; }
+  section.block .sub { text-align: center; color: var(--ink-soft); font-size: 18px; max-width: 620px; margin: 0 auto 48px; }
+
+  /* Demo chat */
+  .demo-shell {
+    max-width: 760px; margin: 0 auto; background: var(--card);
+    border: 1px solid var(--line); border-radius: 24px; overflow: hidden;
+    box-shadow: 0 24px 60px rgba(16, 34, 46, 0.10);
+  }
+  .demo-head {
+    background: var(--ink); color: #fff; padding: 18px 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .demo-head .dot { width: 10px; height: 10px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+  .demo-head strong { font-size: 16px; }
+  .demo-head small { opacity: 0.65; font-size: 13px; margin-left: auto; }
+  .demo-badge {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+    background: var(--amber); color: var(--ink); padding: 4px 10px; border-radius: 999px;
+  }
+  #chat { padding: 24px; min-height: 380px; max-height: 560px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 82%; padding: 12px 18px; border-radius: 18px; font-size: 15px; line-height: 1.55; animation: pop .25s ease; }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .msg.bot { background: var(--teal-tint); color: var(--ink); border-bottom-left-radius: 6px; align-self: flex-start; }
+  .msg.user { background: var(--teal); color: #fff; border-bottom-right-radius: 6px; align-self: flex-end; }
+  .msg.typing { display: flex; gap: 6px; padding: 16px 20px; }
+  .msg.typing i { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-soft); opacity: .4; animation: blink 1.2s infinite; }
+  .msg.typing i:nth-child(2) { animation-delay: .2s; } .msg.typing i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; align-self: flex-start; max-width: 90%; }
+  .chip {
+    border: 1.5px solid var(--teal); color: var(--teal-dark); background: #fff;
+    font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 999px; cursor: pointer;
+    transition: background .15s ease;
+  }
+  .chip:hover { background: var(--teal-tint); }
+  .chat-input { display: flex; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--line); background: #fff; }
+  .chat-input input {
+    flex: 1; border: 1.5px solid var(--line); border-radius: 999px; padding: 12px 20px;
+    font-size: 15px; outline: none; font-family: inherit;
+  }
+  .chat-input input:focus { border-color: var(--teal); }
+  .chat-input button { border-radius: 999px; padding: 12px 26px; }
+
+  /* Trial result cards */
+  .trial-card {
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px 22px; align-self: stretch; max-width: 100%; animation: pop .3s ease;
+  }
+  .trial-card .t-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+  .trial-card h3 { font-size: 17px; letter-spacing: -0.3px; line-height: 1.4; }
+  .match-score {
+    flex-shrink: 0; background: var(--ink); color: #fff; font-weight: 800; font-size: 14px;
+    padding: 6px 12px; border-radius: 999px;
+  }
+  .t-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .t-tag { font-size: 12.5px; font-weight: 600; background: var(--sand); border: 1px solid var(--line); padding: 4px 12px; border-radius: 999px; color: var(--ink-soft); }
+  .t-tag.phase { background: var(--teal-tint); border-color: transparent; color: var(--teal-dark); }
+  .trial-card p.why { font-size: 14px; color: var(--ink-soft); margin: 8px 0; }
+  .trial-card p.why strong { color: var(--teal-dark); }
+  .trial-card ul { margin: 8px 0 14px 18px; font-size: 14px; color: var(--ink-soft); }
+  .trial-card .t-cta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .trial-card .t-id { font-size: 12px; color: #9aa8b2; }
+
+  /* How it works */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+  .step {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 32px 28px; text-align: left;
+  }
+  .step .n {
+    width: 44px; height: 44px; border-radius: 50%; background: var(--teal); color: #fff;
+    font-weight: 800; font-size: 19px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px;
+  }
+  .step h3 { font-size: 19px; margin-bottom: 8px; letter-spacing: -0.3px; }
+  .step p { font-size: 15px; color: var(--ink-soft); }
+
+  /* Sponsors */
+  .sponsor-box {
+    background: var(--ink); color: #fff; border-radius: 24px; padding: 56px;
+    display: grid; grid-template-columns: 1.2fr 1fr; gap: 48px; align-items: center;
+  }
+  .sponsor-box h2 { text-align: left; color: #fff; }
+  .sponsor-box p { color: #b9c8d2; font-size: 17px; margin-bottom: 16px; }
+  .sponsor-box p strong { color: #fff; }
+  .price-card { background: #fff; color: var(--ink); border-radius: var(--radius); padding: 36px 32px; text-align: center; }
+  .price-card .p-num { font-size: 44px; font-weight: 800; letter-spacing: -1.5px; }
+  .price-card .p-lbl { font-size: 14px; color: var(--ink-soft); margin-bottom: 20px; }
+  .price-card ul { list-style: none; text-align: left; font-size: 15px; margin-bottom: 24px; }
+  .price-card li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .price-card li:last-child { border: none; }
+
+  /* FAQ */
+  .faq { max-width: 720px; margin: 0 auto; }
+  .faq details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; }
+  .faq summary { font-weight: 700; font-size: 16px; cursor: pointer; }
+  .faq details p { font-size: 15px; color: var(--ink-soft); margin-top: 10px; }
+
+  footer { border-top: 1px solid var(--line); padding: 40px 0; margin-top: 40px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; align-items: center; }
+  footer p { font-size: 13px; color: var(--ink-soft); max-width: 640px; }
+
+  /* Modal */
+  .modal-veil { position: fixed; inset: 0; background: rgba(16,34,46,.55); display: none; align-items: center; justify-content: center; z-index: 100; padding: 24px; }
+  .modal-veil.open { display: flex; }
+  .modal { background: #fff; border-radius: 20px; padding: 40px 36px; max-width: 460px; text-align: center; animation: pop .25s ease; }
+  .modal h3 { font-size: 22px; margin-bottom: 12px; letter-spacing: -0.5px; }
+  .modal p { color: var(--ink-soft); font-size: 15px; margin-bottom: 24px; }
+
+  .reveal { opacity: 0; transform: translateY(24px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  @media (max-width: 760px) {
+    .sponsor-box { grid-template-columns: 1fr; padding: 36px 28px; }
+    .nav-links a:not(.btn) { display: none; }
+    .hero { padding: 64px 0 48px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#">Trial<span>Run</span></a>
+    <div class="nav-links">
+      <a href="#demo">Try the demo</a>
+      <a href="#how">How it works</a>
+      <a href="#sponsors">For sponsors</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn" href="#demo">Find my trial</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="pill">Live demo</div>
+    <h1>Clinical trials,<br><em>translated into human.</em></h1>
+    <p class="lede">Describe your condition in plain words. TrialRun finds studies you're actually eligible for, and walks you all the way to enrollment.</p>
+    <div class="hero-ctas">
+      <a class="btn" href="#demo">Try the live demo</a>
+      <a class="btn ghost" href="#how">How it works</a>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="num">80%</div><div class="lbl">of trials miss enrollment deadlines</div></div>
+      <div class="stat"><div class="num">$2.5B</div><div class="lbl">spent yearly on patient recruitment in the US</div></div>
+      <div class="stat"><div class="num">5 min</div><div class="lbl">from hello to a matched trial list</div></div>
+    </div>
+  </div>
+</header>
+
+<section class="block" id="demo">
+  <div class="wrap">
+    <h2>Meet your trial matcher</h2>
+    <p class="sub">Answer three quick questions. No medical jargon, no 40-page PDFs. This demo runs on a sample dataset modeled on public trial registries.</p>
+    <div class="demo-shell reveal">
+      <div class="demo-head">
+        <div class="dot"></div>
+        <strong>TrialRun Matcher</strong>
+        <small>typically replies instantly</small>
+        <span class="demo-badge">Demo data</span>
+      </div>
+      <div id="chat"></div>
+      <div class="chat-input">
+        <input id="chatBox" type="text" placeholder="Type your answer here..." autocomplete="off">
+        <button class="btn" id="sendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="sub">ClinicalTrials.gov lists 500,000 studies in language written for regulators. We do the translation.</p>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="n">1</div>
+        <h3>Describe, don't decode</h3>
+        <p>Tell us what's going on in your own words: "I have type 2 diabetes and I'm in Boston." Our AI maps that to real eligibility criteria.</p>
+      </div>
+      <div class="step reveal">
+        <div class="n">2</div>
+        <h3>Get matches that fit</h3>
+        <p>We rank open trials by how well you actually qualify: condition, age, location, and the fine print most people never read.</p>
+      </div>
+      <div class="step reveal">
+        <div class="n">3</div>
+        <h3>Walk to enrollment</h3>
+        <p>Pick a trial and we start your pre-screen with the study site, handle the paperwork, and stay with you until your first visit.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="sponsors" style="padding-top: 0;">
+  <div class="wrap">
+    <div class="sponsor-box reveal">
+      <div>
+        <h2>For sponsors: enrollment, on tap</h2>
+        <p>Patient recruitment is the <strong>number one reason trials run late</strong>, and late trials burn millions per day. Recruitment firms still run this playbook with Facebook ads from 2014.</p>
+        <p>TrialRun brings you <strong>pre-qualified patients</strong> who already passed an AI pre-screen against your protocol. You pay when they enroll, not when they click.</p>
+        <a class="btn" href="mailto:hello@trialrun.example?subject=TrialRun%20for%20sponsors" style="margin-top: 8px;">Talk to us</a>
+      </div>
+      <div class="price-card">
+        <div class="p-num">$0</div>
+        <div class="p-lbl">up front. Pay per enrolled patient.</div>
+        <ul>
+          <li>AI pre-screened against your criteria</li>
+          <li>Warm handoff to your site coordinators</li>
+          <li>Real-time enrollment pipeline dashboard</li>
+          <li>Only pay when a patient enrolls</li>
+        </ul>
+        <a class="btn ghost" href="mailto:hello@trialrun.example?subject=TrialRun%20for%20sponsors">Get a pilot quote</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="faq" style="padding-top: 0;">
+  <div class="wrap">
+    <h2>Questions, answered</h2>
+    <p class="sub">The short version of everything people ask us.</p>
+    <div class="faq">
+      <details class="reveal">
+        <summary>Is TrialRun medical advice?</summary>
+        <p>No. TrialRun helps you discover trials you may qualify for, but joining a study is a decision to make with your doctor. Always talk to your physician before enrolling in anything.</p>
+      </details>
+      <details class="reveal">
+        <summary>Where does the trial data come from?</summary>
+        <p>The live product reads from public registries like ClinicalTrials.gov and directly from sponsor sites. This demo runs on a small sample dataset modeled on real public listings, so you can feel how matching works.</p>
+      </details>
+      <details class="reveal">
+        <summary>What does it cost patients?</summary>
+        <p>Nothing, ever. Sponsors pay us per enrolled patient, which means our incentive is getting you into the right trial, not selling your data.</p>
+      </details>
+      <details class="reveal">
+        <summary>What happens to my health information?</summary>
+        <p>In the live product, your details are used only for matching and pre-screening, never sold, and you can delete everything at any time. This demo stores nothing and sends nothing anywhere.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a class="logo" href="#">Trial<span>Run</span></a>
+    <p><strong>Demo disclaimer:</strong> Trial listings on this page are fictional samples modeled on public registries, for demonstration only. This is not medical advice. Always consult your physician about clinical trials. Built as a concept MVP.</p>
+  </div>
+</footer>
+
+<div class="modal-veil" id="modalVeil">
+  <div class="modal">
+    <h3>You're on the list</h3>
+    <p id="modalText">In the live product, this starts a 5-minute pre-screen with the study site. For now, this is where the demo ends. Thanks for trying TrialRun.</p>
+    <button class="btn" id="modalClose">Back to matches</button>
+  </div>
+</div>
+
+<script>
+/* ---------- Demo trial dataset (fictional samples modeled on public registries) ---------- */
+const TRIALS = [
+  { id: "TR-2026-0142", title: "Investigational weekly GLP-1 therapy for adults with Type 2 diabetes",
+    keywords: ["diabetes", "type 2 diabetes", "t2d", "type2", "blood sugar", "glp-1", "glp1", "a1c"],
+    phase: "Phase 3", locations: ["Boston, MA", "Cambridge, MA"], remote: false,
+    ageMin: 18, ageMax: 75,
+    summary: "A 52-week study testing a once-weekly investigational therapy added to metformin.",
+    eligibility: ["Diagnosed with Type 2 diabetes", "Currently taking metformin", "A1c between 7.0% and 10.0%"],
+    involved: "Monthly site visits in Boston or Cambridge, plus at-home glucose checks." },
+  { id: "TR-2026-0207", title: "Targeted therapy study for HER2-positive metastatic breast cancer",
+    keywords: ["breast cancer", "her2", "her2-positive", "metastatic breast"],
+    phase: "Phase 2", locations: ["Boston, MA"], remote: false,
+    ageMin: 18, ageMax: 99,
+    summary: "Testing an investigational targeted therapy after standard HER2 treatments.",
+    eligibility: ["HER2-positive breast cancer", "Prior HER2-directed therapy", "Measurable disease on imaging"],
+    involved: "Treatment at a Boston cancer center, scans every 8 weeks." },
+  { id: "TR-2026-0089", title: "Early Alzheimer's anti-amyloid study for mild cognitive impairment",
+    keywords: ["alzheimer", "alzheimer's", "dementia", "mci", "mild cognitive impairment", "memory loss"],
+    phase: "Phase 3", locations: ["Cambridge, MA"], remote: true,
+    ageMin: 55, ageMax: 85,
+    summary: "An 18-month study of an investigational anti-amyloid infusion for early-stage disease.",
+    eligibility: ["Mild cognitive impairment or mild dementia", "Amyloid-positive PET scan", "A study partner who sees you regularly"],
+    involved: "Remote screening available; monthly infusions in Cambridge." },
+  { id: "TR-2026-0311", title: "Biologic therapy study for severe eosinophilic asthma",
+    keywords: ["asthma", "severe asthma", "eosinophilic asthma", "breathing"],
+    phase: "Phase 3", locations: ["Boston, MA"], remote: false,
+    ageMin: 18, ageMax: 80,
+    summary: "Testing an investigational biologic for asthma that stays uncontrolled on inhalers.",
+    eligibility: ["Severe asthma on high-dose inhaled steroids", "Elevated blood eosinophils", "2+ exacerbations in the past year"],
+    involved: "Injections every 8 weeks in Boston, lung function tests each visit." },
+  { id: "TR-2026-0273", title: "Preventive therapy study for chronic migraine",
+    keywords: ["migraine", "migraines", "chronic migraine", "headache", "headaches"],
+    phase: "Phase 2", locations: [], remote: true,
+    ageMin: 18, ageMax: 65,
+    summary: "A fully remote study of an investigational preventive taken as a monthly pill.",
+    eligibility: ["15+ headache days per month", "Migraine diagnosis for 1+ year", "No recent preventive changes"],
+    involved: "Entirely from home: video visits and a phone diary app." },
+  { id: "TR-2026-0198", title: "Rapid-acting therapy study for treatment-resistant depression",
+    keywords: ["depression", "treatment-resistant depression", "depressed", "mdd", "major depressive"],
+    phase: "Phase 2", locations: ["Boston, MA"], remote: false,
+    ageMin: 21, ageMax: 64,
+    summary: "Testing an investigational rapid-acting therapy for depression that hasn't responded to 2+ medications.",
+    eligibility: ["Major depressive disorder", "Inadequate response to 2+ antidepressants", "Currently in a depressive episode"],
+    involved: "Supervised dosing sessions in Boston over 4 weeks." },
+  { id: "TR-2026-0355", title: "CGM plus coaching program for Type 2 diabetes (observational)",
+    keywords: ["diabetes", "type 2 diabetes", "t2d", "type2", "blood sugar", "glucose", "cgm"],
+    phase: "Observational", locations: [], remote: true,
+    ageMin: 18, ageMax: 99,
+    summary: "A remote observational study pairing continuous glucose monitors with AI coaching.",
+    eligibility: ["Diagnosed with Type 2 diabetes", "Own a smartphone", "US resident"],
+    involved: "Free CGM by mail, everything else from your phone." },
+  { id: "TR-2026-0119", title: "Neoadjuvant immunotherapy for early-stage non-small cell lung cancer",
+    keywords: ["lung cancer", "nsclc", "non-small cell"],
+    phase: "Phase 3", locations: ["Boston, MA"], remote: false,
+    ageMin: 18, ageMax: 99,
+    summary: "Immunotherapy given before surgery for operable early-stage lung cancer.",
+    eligibility: ["Stage IB-IIIA non-small cell lung cancer", "Eligible for surgery", "No prior systemic therapy"],
+    involved: "Treatment then surgery at a Boston hospital." },
+  { id: "TR-2026-0230", title: "Investigational oral therapy for moderate-to-severe rheumatoid arthritis",
+    keywords: ["rheumatoid arthritis", "ra", "arthritis", "joint pain"],
+    phase: "Phase 3", locations: ["Cambridge, MA"], remote: false,
+    ageMin: 18, ageMax: 75,
+    summary: "A daily oral investigational therapy for RA with inadequate response to methotrexate.",
+    eligibility: ["Rheumatoid arthritis diagnosis", "Inadequate response to methotrexate", "6+ swollen and tender joints"],
+    involved: "Monthly visits in Cambridge for 24 weeks." },
+  { id: "TR-2026-0401", title: "Weight management study of an investigational weekly therapy",
+    keywords: ["obesity", "weight", "weight loss", "overweight", "bmi"],
+    phase: "Phase 3", locations: ["Boston, MA"], remote: true,
+    ageMin: 18, ageMax: 70,
+    summary: "A 68-week study of a weekly investigational therapy plus lifestyle coaching.",
+    eligibility: ["BMI 30+, or 27+ with a weight-related condition", "No diabetes diagnosis", "Willing to use contraception if applicable"],
+    involved: "Hybrid: some visits in Boston, most check-ins remote." },
+  { id: "TR-2026-0166", title: "BTK inhibitor study for relapsing multiple sclerosis",
+    keywords: ["multiple sclerosis", "ms", "relapsing ms"],
+    phase: "Phase 3", locations: ["Boston, MA"], remote: false,
+    ageMin: 18, ageMax: 55,
+    summary: "Testing an investigational brain-penetrant BTK inhibitor against a standard therapy.",
+    eligibility: ["Relapsing MS diagnosis", "1+ relapse in the past 2 years", "EDSS score 0-5.5"],
+    involved: "Neurology visits in Boston, MRI scans every 6 months." },
+  { id: "TR-2026-0288", title: "Topical therapy study for moderate-to-severe eczema (atopic dermatitis)",
+    keywords: ["eczema", "atopic dermatitis", "dermatitis", "skin"],
+    phase: "Phase 2", locations: [], remote: true,
+    ageMin: 18, ageMax: 80,
+    summary: "A remote study of an investigational non-steroid cream for persistent eczema.",
+    eligibility: ["Moderate-to-severe atopic dermatitis", "Inadequate response to topical steroids", "10%+ body surface affected"],
+    involved: "Cream shipped to you; photo check-ins from home." },
+  { id: "TR-2026-0125", title: "Renal denervation study for resistant hypertension",
+    keywords: ["hypertension", "high blood pressure", "resistant hypertension"],
+    phase: "Phase 3", locations: ["Boston, MA"], remote: false,
+    ageMin: 18, ageMax: 80,
+    summary: "A one-time catheter procedure study for blood pressure uncontrolled on 3+ medications.",
+    eligibility: ["Resistant hypertension on 3+ drugs", "Office BP above 150/95", "No prior renal denervation"],
+    involved: "One procedure day in Boston, follow-ups at 1, 3, and 6 months." },
+  { id: "TR-2026-0440", title: "Observational study of persistent symptoms after COVID-19 (Long COVID)",
+    keywords: ["long covid", "covid", "post-covid", "fatigue", "brain fog"],
+    phase: "Observational", locations: [], remote: true,
+    ageMin: 18, ageMax: 99,
+    summary: "Tracking Long COVID symptoms over 12 months to understand recovery patterns.",
+    eligibility: ["Prior confirmed COVID-19 infection", "Symptoms persisting 3+ months", "US resident"],
+    involved: "Monthly symptom surveys from home; optional wearable data." }
+];
+
+const state = { step: 0, condition: "", location: "", age: null, diagnosed: null };
+const chat = document.getElementById("chat");
+const chatBox = document.getElementById("chatBox");
+const sendBtn = document.getElementById("sendBtn");
+
+function scrollChat() { chat.scrollTop = chat.scrollHeight; }
+
+function addMsg(text, who) {
+  const d = document.createElement("div");
+  d.className = "msg " + who;
+  d.innerHTML = text;
+  chat.appendChild(d);
+  scrollChat();
+  return d;
+}
+
+function addTyping() {
+  const d = document.createElement("div");
+  d.className = "msg bot typing";
+  d.innerHTML = "<i></i><i></i><i></i>";
+  chat.appendChild(d);
+  scrollChat();
+  return d;
+}
+
+function botSay(text, delay, cb) {
+  const t = addTyping();
+  setTimeout(() => { t.remove(); addMsg(text, "bot"); if (cb) cb(); }, delay || 900);
+}
+
+function addChips(options, cb) {
+  const wrap = document.createElement("div");
+  wrap.className = "chips";
+  options.forEach(opt => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.textContent = opt;
+    b.onclick = () => { wrap.remove(); addMsg(opt, "user"); cb(opt); };
+    wrap.appendChild(b);
+  });
+  chat.appendChild(wrap);
+  scrollChat();
+}
+
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* ---------- matching ---------- */
+function tokenize(s) {
+  return s.toLowerCase().split(/[^a-z0-9+\-]+/).filter(w => w.length > 2);
+}
+
+/* Short keywords (ra, ms, t2d, ...) need whole-word matches so that
+   "ra" doesn't fire inside "migraines". Longer keywords use substring matching. */
+function kwHit(kw, condRaw, condTokens) {
+  const kl = kw.toLowerCase();
+  const alpha = kl.replace(/[^a-z]/g, "");
+  if (alpha.length <= 3) {
+    const rx = new RegExp("\\b" + kl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
+    return rx.test(condRaw);
+  }
+  return condRaw.includes(kl) || condTokens.some(tok => kl.includes(tok) || tok.includes(kl));
+}
+
+function matchTrials() {
+  const condTokens = tokenize(state.condition);
+  const condRaw = state.condition.toLowerCase();
+  const locRaw = state.location.toLowerCase();
+  const anywhere = /anywhere|remote|any|nationwide|doesn.?t matter/.test(locRaw);
+
+  const scored = [];
+  for (const t of TRIALS) {
+    if (state.age < t.ageMin || state.age > t.ageMax) continue;
+
+    let condHits = 0;
+    const hitKws = [];
+    for (const kw of t.keywords) {
+      if (kwHit(kw, condRaw, condTokens)) {
+        condHits++;
+        if (!hitKws.includes(kw)) hitKws.push(kw);
+      }
+    }
+    if (condHits === 0) continue;
+
+    let score = 45 + Math.min(25, condHits * 8);
+    const reasons = [];
+    reasons.push("Matches your condition (" + hitKws.slice(0, 3).join(", ") + ")");
+
+    const nearLoc = t.locations.find(l => {
+      const ll = l.toLowerCase();
+      return locRaw.includes(ll) || ll.split(",")[0].trim().split(" ").some(w => locRaw.includes(w) && w.length > 3);
+    });
+    if (nearLoc) { score += 20; reasons.push("Near you: " + nearLoc); }
+    else if (t.remote) { score += anywhere ? 15 : 10; reasons.push(anywhere ? "Remote-friendly, join from anywhere" : "Offers remote participation"); }
+    else if (anywhere) { score += 5; }
+
+    reasons.push("You're in the eligible age range (" + t.ageMin + " to " + (t.ageMax >= 99 ? "no upper limit" : t.ageMax) + ")");
+    if (state.diagnosed === "yes") { score += 5; reasons.push("Physician-diagnosed, which most trials require"); }
+
+    scored.push({ trial: t, score: Math.min(98, score), reasons });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, 5);
+}
+
+function renderResults(results) {
+  if (results.length === 0) {
+    botSay("I couldn't find a close match in this demo dataset for <strong>" + esc(state.condition) + "</strong>. Try one of the common conditions, like diabetes, asthma, migraine, or eczema.", 1100, () => {
+      addChips(["Type 2 diabetes", "Asthma", "Migraine", "Eczema", "Start over"], (v) => {
+        if (v === "Start over") restart(); else { state.condition = v; askLocation(); }
+      });
+    });
+    return;
+  }
+  botSay("Done. I found <strong>" + results.length + " trial" + (results.length > 1 ? "s" : "") + "</strong> that look like a strong fit. Here's the top of your list:", 1400, () => {
+    results.forEach((r, i) => {
+      setTimeout(() => {
+        const t = r.trial;
+        const card = document.createElement("div");
+        card.className = "trial-card";
+        const locText = t.locations.length ? t.locations.join(" · ") : "Nationwide (remote)";
+        card.innerHTML =
+          '<div class="t-head"><h3>' + esc(t.title) + '</h3>' +
+          '<div class="match-score">' + r.score + '% match</div></div>' +
+          '<div class="t-meta"><span class="t-tag phase">' + esc(t.phase) + '</span>' +
+          '<span class="t-tag">' + esc(locText) + '</span></div>' +
+          '<p>' + esc(t.summary) + '</p>' +
+          '<p class="why"><strong>Why you match:</strong> ' + esc(r.reasons.join(" · ")) + '</p>' +
+          '<ul>' + t.eligibility.map(e => "<li>" + esc(e) + "</li>").join("") + "</ul>" +
+          '<p style="font-size:13px;color:var(--ink-soft);margin-bottom:12px;"><strong>What\'s involved:</strong> ' + esc(t.involved) + '</p>' +
+          '<div class="t-cta"><button class="btn" data-trial="' + esc(t.id) + '">Start pre-screening</button>' +
+          '<span class="t-id">' + esc(t.id) + ' · demo listing</span></div>';
+        chat.appendChild(card);
+        scrollChat();
+        card.querySelector("button").onclick = (e) => openModal(t.title);
+        if (i === results.length - 1) {
+          setTimeout(() => addChips(["Start over"], () => restart()), 400);
+        }
+      }, i * 450);
+    });
+  });
+}
+
+/* ---------- conversation flow ---------- */
+function askCondition() {
+  state.step = 1;
+  botSay("Hi, I'm your TrialRun matcher. First things first: <strong>what condition are you dealing with?</strong> Just describe it like you'd tell a friend.", 800, () => {
+    addChips(["Type 2 diabetes", "Migraine", "Asthma", "Eczema", "Breast cancer", "Long COVID"], (v) => {
+      state.condition = v; askLocation();
+    });
+  });
+}
+
+function askLocation() {
+  state.step = 2;
+  botSay("Got it, <strong>" + esc(state.condition) + "</strong>. Where are you located? Some trials need in-person visits, others are fully remote.", 900, () => {
+    addChips(["Boston, MA", "Cambridge, MA", "Anywhere / remote"], (v) => {
+      state.location = v; askAge();
+    });
+  });
+}
+
+function askAge() {
+  state.step = 3;
+  botSay("And <strong>how old are you?</strong> Trials have age ranges, so this helps me filter properly.", 900);
+}
+
+function askDiagnosed() {
+  state.step = 4;
+  botSay("Last one: <strong>has a doctor diagnosed you</strong> with this condition? Most trials require a formal diagnosis.", 900, () => {
+    addChips(["Yes", "No", "Not yet"], (v) => {
+      state.diagnosed = v.toLowerCase() === "yes" ? "yes" : "no";
+      botSay("Perfect, let me check what's open for you now.", 800, () => {
+        setTimeout(() => renderResults(matchTrials()), 600);
+      });
+    });
+  });
+}
+
+function handleInput(raw) {
+  const v = raw.trim();
+  if (!v) return;
+  addMsg(esc(v), "user");
+  chatBox.value = "";
+  if (state.step === 1) { state.condition = v; askLocation(); }
+  else if (state.step === 2) { state.location = v; askAge(); }
+  else if (state.step === 3) {
+    const age = parseInt(v.replace(/\D/g, ""), 10);
+    if (!age || age < 1 || age > 120) {
+      botSay("Hmm, I didn't catch that. <strong>How old are you?</strong> Just the number is fine.", 700);
+      return;
+    }
+    state.age = age; askDiagnosed();
+  }
+}
+
+function restart() {
+  chat.innerHTML = "";
+  state.condition = ""; state.location = ""; state.age = null; state.diagnosed = null;
+  askCondition();
+}
+
+function openModal(title) {
+  document.getElementById("modalText").innerHTML =
+    "You picked <strong>" + esc(title) + "</strong>. In the live product, this starts a 5-minute pre-screen with the study site. For now, this is where the demo ends. Thanks for trying TrialRun.";
+  document.getElementById("modalVeil").classList.add("open");
+}
+document.getElementById("modalClose").onclick = () => document.getElementById("modalVeil").classList.remove("open");
+document.getElementById("modalVeil").onclick = (e) => { if (e.target.id === "modalVeil") e.target.classList.remove("open"); };
+
+sendBtn.onclick = () => handleInput(chatBox.value);
+chatBox.addEventListener("keydown", (e) => { if (e.key === "Enter") handleInput(chatBox.value); });
+
+/* ---------- reveal on scroll ---------- */
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("visible"); io.unobserve(e.target); } });
+}, { threshold: 0.12 });
+document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+/* ---------- go ---------- */
+askCondition();
+</script>
+</body>
+</html>
